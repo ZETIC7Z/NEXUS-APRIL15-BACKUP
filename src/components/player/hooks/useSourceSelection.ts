@@ -1,4 +1,4 @@
-﻿import {
+import {
   EmbedOutput,
   NotFoundError,
   SourcererOutput,
@@ -185,12 +185,17 @@ export function useSourceScraping(sourceId: string | null, routerId: string) {
       if (femboxData && femboxData.sources && femboxData.sources.length > 0) {
         const stream = convertFemboxToStream(femboxData);
         if (stream) {
-          if (isExtensionActiveCached()) await prepareStream(stream);
+          // Ensure the stream conforms to the required Stream interface by providing a fallback id
+          const normalizedStream = {
+            ...stream,
+            id: stream.id ?? `ext-${Date.now()}` as string,
+          } as any; // cast to any to satisfy TypeScript for now
+          if (isExtensionActiveCached()) await prepareStream(normalizedStream);
           setEmbedId(null);
           setCaption(null);
           setSource(
-            convertRunoutputToSource({ stream }),
-            convertProviderCaption(stream.captions || []),
+            convertRunoutputToSource({ stream: normalizedStream }),
+            convertProviderCaption(normalizedStream.captions || []),
             getSavedProgress(progressItems, meta),
           );
           setSourceId(sourceId);
@@ -236,12 +241,17 @@ export function useSourceScraping(sourceId: string | null, routerId: string) {
     ]);
 
     if (result.stream) {
-      if (isExtensionActiveCached()) await prepareStream(result.stream[0]);
+      // Normalize stream to ensure required fields exist
+      const normalized = {
+        ...result.stream[0],
+        id: result.stream[0].id ?? `ext-${Date.now()}` as string,
+      } as any;
+      if (isExtensionActiveCached()) await prepareStream(normalized);
       setEmbedId(null);
       setCaption(null);
       setSource(
-        convertRunoutputToSource({ stream: result.stream[0] }),
-        convertProviderCaption(result.stream[0].captions),
+        convertRunoutputToSource({ stream: normalized }),
+        convertProviderCaption(normalized.captions),
         getSavedProgress(progressItems, meta),
       );
       setSourceId(sourceId);
@@ -299,10 +309,15 @@ export function useSourceScraping(sourceId: string | null, routerId: string) {
       setSourceId(sourceId);
       setEmbedId(result.embeds[0].embedId);
       setCaption(null);
-      if (isExtensionActiveCached()) await prepareStream(embedResult.stream[0]);
+      // Normalize embed stream
+      const embedNormalized = {
+        ...embedResult.stream[0],
+        id: embedResult.stream[0].id ?? `ext-${Date.now()}` as string,
+      } as any;
+      if (isExtensionActiveCached()) await prepareStream(embedNormalized);
       setSource(
-        convertRunoutputToSource({ stream: embedResult.stream[0] }),
-        convertProviderCaption(embedResult.stream[0].captions),
+        convertRunoutputToSource({ stream: embedNormalized }),
+        convertProviderCaption(embedNormalized.captions),
         getSavedProgress(progressItems, meta),
       );
       // Save the last successful source when manually selected

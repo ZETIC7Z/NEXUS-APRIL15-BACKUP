@@ -123,7 +123,7 @@ async function comboScraper(
 export const vidlinkScraper = makeSourcerer({
   id: "vidlink-custom",
   name: "VidLink \uD83D\uDD25",
-  rank: 900,
+  rank: 890,
   disabled: false,
   flags: [],
   scrapeMovie: comboScraper,
@@ -138,7 +138,7 @@ export const rgshowsScraper = null as any;
 export const yesmoviesScraper = makeSourcerer({
   id: "yesmovies-custom",
   name: "YesMovies",
-  rank: 860,
+  rank: 870,
   flags: [],
   scrapeMovie: async (ctx: MovieScrapeContext) => {
     const res = await ctx.proxiedFetcher<any>(
@@ -169,7 +169,7 @@ const VIDROCK_PASSPHRASE = "x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9";
 export const vidrockScraper = makeSourcerer({
   id: "vidrock-custom",
   name: "VidRock",
-  rank: 817,
+  rank: 860,
   flags: [],
   scrapeMovie: async (ctx: MovieScrapeContext) => {
     const key = CryptoJS.enc.Utf8.parse(VIDROCK_PASSPHRASE);
@@ -303,7 +303,7 @@ async function scrapeTugaflixPage(
   $("iframe[src]").each((_: any, el: any) => {
     const src = $(el).attr("src") || "";
     if (src.includes("streamtape") || src.includes("streamtp")) {
-      streamtapeUrl = src.startsWith("//") ? "https:" + src : src;
+      streamtapeUrl = src.startsWith("//") ? `https:${src}` : src;
     }
   });
 
@@ -353,9 +353,9 @@ async function scrapeTugaflixPage(
 
   // Build the full get_video URL (normalise leading //)
   const getVideoUrl = getVideoPath.startsWith("//")
-    ? "https:" + getVideoPath
+    ? `https:${getVideoPath}`
     : getVideoPath.startsWith("/")
-    ? "https://streamtape.com" + getVideoPath
+    ? `https://streamtape.com${getVideoPath}`
     : getVideoPath;
 
   // Follow the 302 redirect to the real tapecontent.net MP4
@@ -398,7 +398,7 @@ export const tugaflixScraper = makeSourcerer({
   scrapeShow: scrapeTugaflixShow,
 });
 
-// --- Zeticuz Api Scraper (GoatAPI Lightning + FebBox) ---
+// --- ZeticuzApi Scraper (GoatAPI Lightning + FebBox) ---
 // Lightning: { success, streams:[{source, type:"hls", url, quality, referer}] }
 // GoatAPI supports CORS (*) — fetch directly (no proxy), wrap m3u8 through GoatAPI /api/proxy.
 // FebBox fallback: { success, streams:[{quality,url,codec}] }
@@ -546,16 +546,76 @@ async function zeticuzApiLogic(
     }
   }
 
-  throw new NotFoundError("Zeticuz Api: no streams available");
+  throw new NotFoundError("ZeticuzApi: no streams available");
 }
 
 export const zeticuzApiScraper = makeSourcerer({
   id: "zeticuzapi-custom",
   name: "ZeticuzApi 🔥",
-  rank: 890,
+  rank: 880,
   flags: [],
   scrapeMovie: zeticuzApiLogic,
   scrapeShow: zeticuzApiLogic,
+});
+
+// --- FebBox 4K Scraper (rank 880: after ZeticuzApi 890, before Tugaflix ~806) ---
+// By being a proper makeSourcerer provider, FebBox runs in the correct position in the
+// providers engine — no special loop needed. When no video, throws NotFoundError and the
+// engine silently moves to the next source (no error modal).
+
+async function febboxScraperLogic(
+  ctx: MovieScrapeContext | ShowScrapeContext,
+): Promise<SourcererOutput> {
+  const { scrapeFemboxMovie, scrapeFemboxTV, convertFemboxToStream } =
+    await import("@/backend/providers/fembox");
+
+  let turnstileToken = "";
+  try {
+    const { getTurnstileToken } = await import("@/stores/turnstile");
+    turnstileToken = await getTurnstileToken();
+  } catch {
+    // Ignore turnstile error
+  }
+
+  let femboxData = null;
+  if (ctx.media.type === "movie") {
+    femboxData = await scrapeFemboxMovie(ctx.media.tmdbId, turnstileToken);
+  } else if (
+    ctx.media.type === "show" &&
+    (ctx.media as any).season &&
+    (ctx.media as any).episode
+  ) {
+    const showCtx = ctx as ShowScrapeContext;
+    femboxData = await scrapeFemboxTV(
+      showCtx.media.tmdbId,
+      showCtx.media.season.number,
+      showCtx.media.episode.number,
+      turnstileToken,
+    );
+  }
+
+  if (!femboxData) {
+    throw new NotFoundError("FebBox: no stream available for this title");
+  }
+
+  const stream = convertFemboxToStream(femboxData);
+  if (!stream) {
+    throw new NotFoundError("FebBox: could not convert stream data");
+  }
+
+  return {
+    embeds: [],
+    stream: [{ ...stream, id: "febbox-stream" }],
+  };
+}
+
+export const febboxScraper = makeSourcerer({
+  id: "febbox",
+  name: "FebBox (4K) ⭐",
+  rank: 900,
+  flags: [],
+  scrapeMovie: febboxScraperLogic,
+  scrapeShow: febboxScraperLogic,
 });
 
 // --- FSOnline Scraper ---
@@ -639,7 +699,7 @@ async function scrapeDoodstream(ctx: any, url: string): Promise<any> {
 export const fsonlineScraper = makeSourcerer({
   id: "fsonline-custom",
   name: "FSOnline",
-  rank: 802,
+  rank: 850,
   flags: [],
   scrapeMovie: async (ctx: MovieScrapeContext) => {
     const movieUrl = `https://www3.fsonline.app/film/${slugify(ctx.media.title, { lower: true, strict: true })}/`;
@@ -720,7 +780,7 @@ const VIDNEST_EMBED_BASE = "https://vidnest.fun";
 export const vidnestScraper = makeSourcerer({
   id: "vidnest-custom",
   name: "VidNest",
-  rank: 800,
+  rank: 840,
   flags: [],
   scrapeMovie: async (ctx: MovieScrapeContext) => ({
     embeds: [{ embedId: "vidnest-iframe-custom", url: `${VIDNEST_EMBED_BASE}/movie/${ctx.media.tmdbId}` }],

@@ -1,7 +1,7 @@
 {
   "packageManager": "pnpm@10.33.0",
   "name": "NEXUS",
-  "version": "5.6.0",
+  "version": "5.7.0",
   "private": true,
   "homepage": "https://nexus.app",
   "scripts": {

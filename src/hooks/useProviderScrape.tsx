@@ -1,7 +1,10 @@
 import { FullScraperEvents, RunOutput, ScrapeMedia } from "@p-stream/providers";
 import { RefObject, useCallback, useEffect, useRef, useState } from "react";
 
-import { isExtensionActiveCached } from "@/backend/extension/messaging";
+import {
+  isExtensionActive,
+  isExtensionActiveCached,
+} from "@/backend/extension/messaging";
 import { prepareStream } from "@/backend/extension/streams";
 import {
   connectServerSideEvents,
@@ -32,14 +35,12 @@ type ScraperEvent<Event extends keyof FullScraperEvents> = Parameters<
   NonNullable<FullScraperEvents[Event]>
 >[0];
 
-// Custom sources that should appear in the spinner (defined outside to avoid recreating on every render)
-const customSources: ScrapingSegment[] = [
-  { id: "febbox", name: "FebBox (4K) ⭐", status: "waiting", percentage: 0 },
-];
-
 // Source name overrides for builtin providers (adds emojis etc.)
 const SOURCE_NAME_OVERRIDES: Record<string, string> = {
   tugaflix: "Tugaflix 🔥",
+  "vidlink-custom": "VidLink 🔥",
+  "zeticuzapi-custom": "ZeticuzApi 🔥",
+  febbox: "FebBox (4K) ⭐",
 };
 
 function applyNameOverrides(
@@ -57,27 +58,22 @@ function useBaseScrape() {
   const lastId = useRef<string | null>(null);
 
   const initEvent = useCallback((evt: ScraperEvent<"init">) => {
-    // PRESERVE existing custom sources (they may be processing) and ADD provider sources
+    // Initialize spinner state from the providers engine source list (FebBox is now a real provider)
     setSources((existingSources) => {
       const allSources: Record<string, ScrapingSegment> = {};
 
-      // First, add custom sources (preserve existing status if already processing)
-      customSources.forEach((source) => {
-        if (existingSources[source.id]) {
-          allSources[source.id] = existingSources[source.id];
-        } else {
-          allSources[source.id] = { ...source };
-        }
-      });
-
-      // Add regular provider sources (with name overrides applied)
+      // Add all provider sources (with name overrides applied, e.g. Tugaflix 🔥)
       const patchedMeta = applyNameOverrides(getCachedMetadata());
       evt.sourceIds.forEach((v) => {
+        // Preserve existing status if already set (e.g. from resume)
+        if (existingSources[v]) {
+          allSources[v] = existingSources[v];
+          return;
+        }
         const source = patchedMeta.find((s) => s.id === v);
-        if (!source) return;
         const out: ScrapingSegment = {
-          name: source.name,
-          id: source.id,
+          name: source?.name || v,
+          id: v,
           status: "waiting",
           percentage: 0,
         };
@@ -90,26 +86,17 @@ function useBaseScrape() {
     setSourceOrder((existingOrder) => {
       const allSourceOrder: ScrapingItems[] = [];
 
-      // Add custom sources first (if not already in order)
-      customSources.forEach((source) => {
-        if (!existingOrder.find((o) => o.id === source.id)) {
-          allSourceOrder.push({ id: source.id, children: [] });
-        }
-      });
-
-      // Keep existing custom source order
-      existingOrder
-        .filter((o) => customSources.some((c) => c.id === o.id))
-        .forEach((o) => {
-          if (!allSourceOrder.find((ao) => ao.id === o.id)) {
-            allSourceOrder.push(o);
-          }
-        });
-
-      // Add provider sources
+      // Add provider sources in order
       evt.sourceIds.forEach((v) => {
         if (!allSourceOrder.find((o) => o.id === v)) {
           allSourceOrder.push({ id: v, children: [] });
+        }
+      });
+
+      // Keep any existing entries not in this list (e.g. from resume)
+      existingOrder.forEach((o) => {
+        if (!allSourceOrder.find((ao) => ao.id === o.id)) {
+          allSourceOrder.push(o);
         }
       });
 
@@ -122,7 +109,7 @@ function useBaseScrape() {
     setSources((s) => {
       if (s[id]) s[id].status = "pending";
       if (lastIdTmp && s[lastIdTmp] && s[lastIdTmp].status === "pending")
-        s[lastIdTmp].status = "success";
+        s[lastIdTmp].status = "notfound";
       return { ...s };
     });
     setCurrentSource(id);
@@ -148,10 +135,9 @@ function useBaseScrape() {
           const source = getCachedMetadata().find(
             (src) => src.id === v.embedScraperId,
           );
-          if (!source) throw new Error("invalid source id");
           const out: ScrapingSegment = {
             embedId: v.embedScraperId,
-            name: source.name,
+            name: source?.name ?? v.embedScraperId,
             id: v.id,
             status: "waiting",
             percentage: 0,
@@ -162,7 +148,10 @@ function useBaseScrape() {
       });
       setSourceOrder((s) => {
         const source = s.find((v) => v.id === evt.sourceId);
-        if (!source) throw new Error("invalid source id");
+        if (!source) {
+          console.error("invalid source id for discoverEmbeds", evt.sourceId);
+          return s;
+        }
         source.children = evt.embeds.map((v) => v.id);
         return [...s];
       });
@@ -259,31 +248,22 @@ export function useScrape() {
         ? playerState.failedEmbedsPerMedia[mediaKey] || {}
         : {};
 
-      // Start with all available sources (filtered by disabled and failed ones)
-      const hasFebboxKey =
-        usePreferencesStore.getState().febboxKey ||
-        import.meta.env.VITE_DEFAULT_FEBBOX_KEY;
+      // All sources from the providers engine
+      // Filtered by: media type, not disabled, not already failed for this media
       const availableSources = allSources
-        .filter(
-          (source) =>
-            !(disabledSources || []).includes(source.id) &&
-            !failedSources.includes(source.id),
-        )
-        .map((source) => source.id);
+        .filter((source) => {
+          const isMovie = media.type === "movie";
+          const supportsMovie = source.mediaTypes?.includes("movie");
+          const supportsShow = source.mediaTypes?.includes("show");
+          if (isMovie && !supportsMovie) return false;
+          if (!isMovie && !supportsShow) return false;
 
-      // Inject FebBox into the available sources list at rank position 880
-      // (after ZeticuzApi rank 890, before Tugaflix rank ~806)
-      // This gives: VidLink > ZeticuzApi > FebBox > Tugaflix > FSOnline > ...
-      if (hasFebboxKey && !availableSources.includes("febbox")) {
-        const zeticuzIdx = availableSources.indexOf("zeticuzapi-custom");
-        if (zeticuzIdx !== -1) {
-          // Insert after ZeticuzApi
-          availableSources.splice(zeticuzIdx + 1, 0, "febbox");
-        } else {
-          // Fallback: insert at position 2 (after VidLink and ZeticuzApi slot)
-          availableSources.splice(2, 0, "febbox");
-        }
-      }
+          return (
+            !(disabledSources || []).includes(source.id) &&
+            !failedSources.includes(source.id)
+          );
+        })
+        .map((source) => source.id);
 
       let baseSourceOrder = availableSources;
 
@@ -324,14 +304,16 @@ export function useScrape() {
 
         // If the source was removed (e.g., due to failing previously), find its index in the unfiltered list
         if (startIndex === -1) {
+          // Disabled FebBox injection: the FebBox source is temporarily hidden.
+          // const unfilteredOrder = allSources.map((s) => s.id);
+          // // Add custom sources to unfiltered order for reference
+          // const febboxKeyPresent =
+          //   usePreferencesStore.getState().febboxKey ||
+          //   import.meta.env.VITE_DEFAULT_FEBBOX_KEY;
+          // if (febboxKeyPresent && !unfilteredOrder.includes("febbox")) {
+          //   unfilteredOrder.unshift("febbox");
+          // }
           const unfilteredOrder = allSources.map((s) => s.id);
-          // Add custom sources to unfiltered order for reference
-          const febboxKeyPresent =
-            usePreferencesStore.getState().febboxKey ||
-            import.meta.env.VITE_DEFAULT_FEBBOX_KEY;
-          if (febboxKeyPresent && !unfilteredOrder.includes("febbox")) {
-            unfilteredOrder.unshift("febbox");
-          }
 
           const rawIndex = unfilteredOrder.indexOf(startFromSourceId);
           if (rawIndex !== -1) {
@@ -347,15 +329,6 @@ export function useScrape() {
 
         if (startIndex !== -1) {
           filteredSourceOrder = filteredSourceOrder.slice(startIndex + 1);
-        } else {
-          // Explicitly prevent restarting from beginning if we were trying to find the next source and failed
-          // If we couldn't find a valid starting point, just empty it or find something else so we don't loop
-          const currentFebboxIdx = filteredSourceOrder.indexOf("febbox");
-          if (startFromSourceId === "febbox" && currentFebboxIdx !== -1) {
-            filteredSourceOrder = filteredSourceOrder.slice(
-              currentFebboxIdx + 1,
-            );
-          }
         }
 
         // If we reached the end of the list, DO NOT loop back — return empty so error screen shows
@@ -385,15 +358,13 @@ export function useScrape() {
       const allSourcesInit: Record<string, ScrapingSegment> = {};
       const allSourceOrder: ScrapingItems[] = [];
 
-      // Map spinnerSourceOrder to ScrapingSegment items
+      // Map spinnerSourceOrder to ScrapingSegment items (all sources come from the providers engine)
+      const patchedMetaForSpinner = applyNameOverrides(
+        allSources.map((s) => ({ id: s.id, name: s.name })),
+      );
       const combinedSources: ScrapingSegment[] = spinnerSourceOrder.map(
         (id) => {
-          // If it's a custom source (FebBox)
-          const custom = customSources.find((c) => c.id === id);
-          if (custom) return { ...custom, status: "waiting" as const };
-
-          // Otherwise it's a provider source — apply name overrides (e.g. Tugaflix 🔥)
-          const source = allSources.find((s) => s.id === id);
+          const source = patchedMetaForSpinner.find((s) => s.id === id);
           const rawName = source?.name || id;
           const patchedName = SOURCE_NAME_OVERRIDES[id] ?? rawName;
           return {
@@ -414,93 +385,13 @@ export function useScrape() {
       setSources(allSourcesInit);
       setSourceOrder(allSourceOrder);
 
-      // Only try custom sources that are in filteredSourceOrder (respects resume position)
-      const customSourceIdsToTry = filteredSourceOrder.filter((id) =>
-        customSources.some((c) => c.id === id),
-      );
-
-      // Try custom sources (FebBox) only if they are in the filtered list
-      for (const customSourceId of customSourceIdsToTry) {
-        if (customSourceId === "febbox") {
-          // Try Febbox with a 15-second timeout for fast failure detection
-          setCurrentSource("febbox");
-          setSources((s) => ({
-            ...s,
-            febbox: { ...s.febbox, status: "pending", percentage: 50 },
-          }));
-          try {
-            const { scrapeFemboxMovie, scrapeFemboxTV, convertFemboxToStream } =
-              await import("@/backend/providers/fembox");
-
-            // Wrap FebBox scraping in a timeout (15s max)
-            const febboxTimeout = <T,>(
-              promise: Promise<T>,
-              ms: number,
-            ): Promise<T | null> =>
-              Promise.race([
-                promise,
-                new Promise<null>((resolve) => {
-                  setTimeout(() => resolve(null), ms);
-                }),
-              ]);
-
-            let femboxData = null;
-            if (media.type === "movie") {
-              femboxData = await febboxTimeout(
-                scrapeFemboxMovie(media.tmdbId),
-                15000,
-              );
-            } else if (media.type === "show" && media.episode && media.season) {
-              femboxData = await febboxTimeout(
-                scrapeFemboxTV(
-                  media.tmdbId,
-                  media.season.number,
-                  media.episode.number,
-                ),
-                15000,
-              );
-            }
-
-            if (femboxData) {
-              const stream = convertFemboxToStream(femboxData);
-              if (stream) {
-                setSources((s) => ({
-                  ...s,
-                  febbox: { ...s.febbox, status: "success", percentage: 100 },
-                }));
-                setLastSuccessfulSource("febbox");
-                const femboxOutput = {
-                  stream: { ...stream, id: "febbox-stream" },
-                  sourceId: "febbox",
-                  embedId: undefined,
-                };
-                if (isExtensionActiveCached()) {
-                  await prepareStream(femboxOutput.stream);
-                }
-                return getResult(femboxOutput);
-              }
-            }
-            setSources((s) => ({
-              ...s,
-              febbox: { ...s.febbox, status: "failure", percentage: 100 },
-            }));
-          } catch {
-            setSources((s) => ({
-              ...s,
-              febbox: { ...s.febbox, status: "failure", percentage: 100 },
-            }));
-          }
-        }
-      }
-
-      // Continue with regular providers (exclude custom sources like febbox from provider engine)
-      const customSourceIds = customSources.map((c) => c.id);
-      const providerSourceOrder = filteredSourceOrder.filter(
-        (id) => !customSourceIds.includes(id),
-      );
+      // Run all providers in the correct order (FebBox is now a proper provider at rank 880)
+      // The providers engine handles NotFoundError silently — no error modal for missing streams
+      const providerSourceOrder = filteredSourceOrder;
 
       const providerApiUrl = getLoadbalancedProviderApiUrl();
-      if (providerApiUrl && !isExtensionActiveCached()) {
+      const extensionActive = await isExtensionActive();
+      if (providerApiUrl && !extensionActive) {
         startScrape();
         const baseUrlMaker = makeProviderUrl(providerApiUrl);
         const conn = await connectServerSideEvents<RunOutput | "">(

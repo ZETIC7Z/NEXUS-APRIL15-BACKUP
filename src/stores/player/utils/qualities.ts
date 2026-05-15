@@ -103,7 +103,14 @@ export function selectQuality(
     if (quality) {
       const stream = source.qualities[quality];
       if (stream) {
-        return { stream, quality };
+        return {
+          stream: {
+            ...stream,
+            headers: source.headers,
+            preferredHeaders: source.preferredHeaders,
+          },
+          quality,
+        };
       }
     }
   }

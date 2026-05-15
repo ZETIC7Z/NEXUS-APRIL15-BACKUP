@@ -45,6 +45,7 @@ import { initializeOldStores } from "./stores/__old/migrations";
 initializeChromecast();
 initializeImageFadeIn();
 initializeTVMode();
+extensionInfo(); // Warm up extension cache
 
 function LoadingScreen(props: { type: "user" | "lazy" }) {
   const mapping = {
@@ -178,7 +179,7 @@ function TheRouter(props: { children: ReactNode }) {
 function ExtensionStatus() {
   const { t } = useTranslation();
   const [state] = useAsyncFn(async () => {
-    if (!isExtensionActiveCached) {
+    if (!isExtensionActiveCached()) {
       return extensionInfo();
     }
   });
@@ -196,21 +197,21 @@ const root = createRoot(container!);
 
 root.render(
   <StrictMode>
-    <ErrorBoundary>
-      <HelmetProvider>
-        <Suspense fallback={<LoadingScreen type="lazy" />}>
-          <ExtensionStatus />
-          <ThemeProvider applyGlobal>
-            <ProgressSyncer />
-            <BookmarkSyncer />
-            <GroupSyncer />
-            <SettingsSyncer />
-            <TheRouter>
+    <TheRouter>
+      <ErrorBoundary>
+        <HelmetProvider>
+          <Suspense fallback={<LoadingScreen type="lazy" />}>
+            <ExtensionStatus />
+            <ThemeProvider applyGlobal>
+              <ProgressSyncer />
+              <BookmarkSyncer />
+              <GroupSyncer />
+              <SettingsSyncer />
               <MigrationRunner />
-            </TheRouter>
-          </ThemeProvider>
-        </Suspense>
-      </HelmetProvider>
-    </ErrorBoundary>
+            </ThemeProvider>
+          </Suspense>
+        </HelmetProvider>
+      </ErrorBoundary>
+    </TheRouter>
   </StrictMode>,
 );

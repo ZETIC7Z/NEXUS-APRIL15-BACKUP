@@ -28,6 +28,15 @@ export interface FemboxStream {
   size: string;
 }
 
+// FebBox/Fembox CDN headers required for playback — must be sent with every
+// manifest request and with every HLS segment request.
+const FEMBOX_HEADERS = {
+  Referer: "https://www.febbox.com/",
+  Origin: "https://www.febbox.com",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+};
+
 /**
  * Scrape movie from Fembox API (fembox.aether.mom)
  */
@@ -48,13 +57,10 @@ export async function scrapeFemboxMovie(
   const url = `https://fembox.aether.mom/movie/${tmdbId}?ui=${febboxKey}${turnstileToken ? `&turnstile_token=${turnstileToken}` : ""}`;
 
   try {
-    // Use proxiedFetch to bypass CORS
     const data = await proxiedFetch<FemboxResponse>(url, {});
-
     if (data && data.sources && data.sources.length > 0) {
       return data;
     }
-
     return null;
   } catch {
     return null;
@@ -73,7 +79,6 @@ export async function scrapeFemboxTV(
   const userToken = usePreferencesStore.getState().febboxKey;
   const sharedToken = conf().VITE_DEFAULT_FEBBOX_KEY;
 
-  // Use user's token if available, otherwise use shared token
   const febboxKey = userToken || sharedToken;
 
   if (!febboxKey) {
@@ -83,13 +88,10 @@ export async function scrapeFemboxTV(
   const url = `https://fembox.aether.mom/tv/${tmdbId}-${season}-${episode}?ui=${febboxKey}${turnstileToken ? `&turnstile_token=${turnstileToken}` : ""}`;
 
   try {
-    // Use proxiedFetch to bypass CORS
     const data = await proxiedFetch<FemboxResponse>(url, {});
-
     if (data && data.sources && data.sources.length > 0) {
       return data;
     }
-
     return null;
   } catch {
     return null;
@@ -97,34 +99,67 @@ export async function scrapeFemboxTV(
 }
 
 /**
- * Convert Fembox response to standard stream format
+ * Convert a Fembox API response to the internal stream format.
+ *
+ * FebBox CDN streams are almost always HLS (.m3u8) and require specific
+ * Referer/Origin headers.  Previously the converter wrapped them inside a
+ * "file" type with qualities, which silently dropped the headers and caused
+ * HLS.js to fail with a "humanity verification" error because the CDN saw
+ * requests without the correct Referer.
+ *
+ * Fix: if the best available source is HLS, return it as `type: "hls"` with
+ * the full headers object.  The player's base.ts will then pass those headers
+ * to the extension domain-rule so every segment request carries them.
+ * If all sources happen to be MP4 we fall back to the "file" approach.
  */
 export function convertFemboxToStream(femboxData: FemboxResponse) {
   if (!femboxData || !femboxData.sources || femboxData.sources.length === 0) {
     return null;
   }
 
-  // Sort sources by quality - prefer higher quality
+  // Sort by quality — 4K first
+  const qualityOrder: Record<string, number> = {
+    "4K": 4,
+    "2160p": 4,
+    "1080p": 3,
+    "1080": 3,
+    "720p": 2,
+    "720": 2,
+    "480p": 1,
+    "480": 1,
+  };
+
   const sortedSources = [...femboxData.sources].sort((a, b) => {
-    const qualityOrder: Record<string, number> = {
-      "4K": 4,
-      "2160p": 4,
-      "1080p": 3,
-      "1080": 3,
-      "720p": 2,
-      "720": 2,
-      "480p": 1,
-      "480": 1,
-    };
-    const aQuality = qualityOrder[a.quality] || 0;
-    const bQuality = qualityOrder[b.quality] || 0;
-    return bQuality - aQuality;
+    const aQ = qualityOrder[a.quality] ?? 0;
+    const bQ = qualityOrder[b.quality] ?? 0;
+    return bQ - aQ;
   });
 
-  // Use the highest quality source
   const primarySource = sortedSources[0];
 
-  // Map Fembox quality to standard quality
+  // Build captions
+  const captions = (femboxData.subtitles || []).map((sub) => ({
+    id: sub.language,
+    url: sub.url,
+    type: "vtt" as const,
+    hasCorsRestrictions: true,
+    language: sub.language,
+  }));
+
+  // ── HLS path ────────────────────────────────────────────────────────────────
+  // Return as a proper "hls" stream so the player passes headers to HLS.js and
+  // the extension domain-rule attaches them to every segment request.
+  if (primarySource.url.includes(".m3u8")) {
+    return {
+      type: "hls" as const,
+      playlist: primarySource.url,
+      headers: FEMBOX_HEADERS,
+      flags: [],
+      captions,
+    };
+  }
+
+  // ── MP4 / file path ─────────────────────────────────────────────────────────
   const mapQuality = (q: string): string => {
     if (q.includes("4K") || q.includes("2160")) return "4k";
     if (q.includes("1080")) return "1080";
@@ -134,28 +169,19 @@ export function convertFemboxToStream(femboxData: FemboxResponse) {
     return "unknown";
   };
 
-  // Determine stream type - HLS or MP4
-  const isHls = primarySource.url.includes(".m3u8");
-
-  // Build qualities object with all available qualities
   const qualities: Record<string, { type: "mp4" | "hls"; url: string }> = {};
   for (const source of sortedSources) {
     const quality = mapQuality(source.quality);
-    const sourceIsHls = source.url.includes(".m3u8");
     if (!qualities[quality]) {
       qualities[quality] = {
-        type: sourceIsHls ? ("hls" as const) : ("mp4" as const),
+        type: source.url.includes(".m3u8") ? ("hls" as const) : ("mp4" as const),
         url: source.url,
       };
     }
   }
 
-  // Ensure at least one quality exists
   if (Object.keys(qualities).length === 0) {
-    qualities.unknown = {
-      type: isHls ? ("hls" as const) : ("mp4" as const),
-      url: primarySource.url,
-    };
+    qualities.unknown = { type: "mp4" as const, url: primarySource.url };
   }
 
   return {
@@ -163,12 +189,7 @@ export function convertFemboxToStream(femboxData: FemboxResponse) {
     id: "fembox",
     flags: [],
     qualities,
-    captions: (femboxData.subtitles || []).map((sub) => ({
-      id: sub.language,
-      url: sub.url,
-      type: "vtt" as const,
-      hasCorsRestrictions: true,
-      language: sub.language,
-    })),
+    headers: FEMBOX_HEADERS,
+    captions,
   };
 }

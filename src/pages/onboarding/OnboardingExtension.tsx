@@ -1,571 +1,322 @@
-import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useAsyncFn, useInterval } from "react-use";
 
+import { sendPage } from "@/backend/extension/messaging";
+import { Button } from "@/components/buttons/Button";
 import { Icon, Icons } from "@/components/Icon";
+import { Loading } from "@/components/layout/Loading";
 import { Stepper } from "@/components/layout/Stepper";
+import { CenterContainer } from "@/components/layout/ThinContainer";
+import { Heading2, Paragraph } from "@/components/utils/Text";
 import { MinimalPageLayout } from "@/pages/layouts/MinimalPageLayout";
 import {
   useNavigateOnboarding,
   useRedirectBack,
 } from "@/pages/onboarding/onboardingHooks";
+import { Card, Link } from "@/pages/onboarding/utils";
 import { PageTitle } from "@/pages/parts/util/PageTitle";
+import { conf } from "@/setup/config";
 import {
   ExtensionDetectionResult,
   detectExtensionInstall,
 } from "@/utils/detectFeatures";
 import { getExtensionState } from "@/utils/extension";
-import type { ExtensionStatus } from "@/utils/extension";
+import type { ExtensionStatus as ExtensionStatusType } from "@/utils/extension";
 
-// Extension URLs
-const CHROME_EXTENSION_URL =
-  "https://chromewebstore.google.com/detail/lordflix-extension/kadaciphkadjdmibffgjlgnomecepmke";
-const FIREFOX_EXTENSION_URL =
-  "https://addons.mozilla.org/en-US/firefox/addon/lordflix-extension-v1/";
-const SAFARI_USERSCRIPT_APP_URL =
-  "https://apps.apple.com/us/app/userscripts/id1463298887";
-const USERSCRIPT_URL =
-  "https://raw.githubusercontent.com/p-stream/Userscript/main/p-stream.user.js";
+// --- Configuration ---
+const CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/lordflix-extension/kadaciphkadjdmibffgjlgnomecepmke";
+const FIREFOX_EXTENSION_URL = "https://addons.mozilla.org/en-US/firefox/addon/lordflix-extension-v1/";
+const USERSCRIPT_URL = "https://raw.githubusercontent.com/p-stream/Userscript/main/p-stream.user.js";
 
-// Browser Icons (SVG URLs)
-const BROWSER_ICONS: Record<string, string> = {
-  chrome:
-    "https://upload.wikimedia.org/wikipedia/commons/e/e1/Google_Chrome_icon_%28February_2022%29.svg",
-  firefox:
-    "https://upload.wikimedia.org/wikipedia/commons/a/a0/Firefox_logo%2C_2019.svg",
-  edge: "https://upload.wikimedia.org/wikipedia/commons/9/98/Microsoft_Edge_logo_%282019%29.svg",
-  safari:
-    "https://upload.wikimedia.org/wikipedia/commons/5/52/Safari_browser_logo.svg",
-  brave: "https://upload.wikimedia.org/wikipedia/commons/c/c4/Brave_lion.png",
-  opera:
-    "https://upload.wikimedia.org/wikipedia/commons/4/49/Opera_2015_icon.svg",
-};
+// --- Helper Components ---
 
-// Device Icons (SVG URLs)
-const DEVICE_ICONS: Record<string, string> = {
-  android:
-    "https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg",
-  ios: "https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg",
-  windows:
-    "https://upload.wikimedia.org/wikipedia/commons/5/5f/Windows_logo_-_2012.svg",
-  macos:
-    "https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg",
-  linux: "https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg",
-  tv: "https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg",
-};
-
-type DeviceType = "android" | "ios" | "windows" | "macos" | "linux" | "tv";
-
-interface DeviceInfo {
-  type: DeviceType;
-  name: string;
-  icon: string;
-  isMobile: boolean;
-  isTablet: boolean;
-  isTV: boolean;
-}
-
-function detectDevice(): DeviceInfo {
-  const ua = navigator.userAgent;
-
-  // TV detection
-  if (/TV|SmartTV|GoogleTV|AFTM|AFT|Roku|webOS|Tizen/i.test(ua)) {
-    return {
-      type: "tv",
-      name: "Smart TV",
-      icon: DEVICE_ICONS.tv,
-      isMobile: false,
-      isTablet: false,
-      isTV: true,
-    };
-  }
-
-  // iOS detection
-  if (/iPhone|iPad|iPod/i.test(ua)) {
-    const isTablet = /iPad/i.test(ua);
-    return {
-      type: "ios",
-      name: isTablet ? "iPad" : "iPhone",
-      icon: DEVICE_ICONS.ios,
-      isMobile: !isTablet,
-      isTablet,
-      isTV: false,
-    };
-  }
-
-  // Android detection
-  if (/Android/i.test(ua)) {
-    const isTablet = !/Mobile/i.test(ua);
-    return {
-      type: "android",
-      name: isTablet ? "Android Tablet" : "Android",
-      icon: DEVICE_ICONS.android,
-      isMobile: !isTablet,
-      isTablet,
-      isTV: false,
-    };
-  }
-
-  // macOS
-  if (/Mac OS X|Macintosh/i.test(ua)) {
-    return {
-      type: "macos",
-      name: "macOS",
-      icon: DEVICE_ICONS.macos,
-      isMobile: false,
-      isTablet: false,
-      isTV: false,
-    };
-  }
-
-  // Windows
-  if (/Windows/i.test(ua)) {
-    return {
-      type: "windows",
-      name: "Windows",
-      icon: DEVICE_ICONS.windows,
-      isMobile: false,
-      isTablet: false,
-      isTV: false,
-    };
-  }
-
-  // Linux
-  if (/Linux/i.test(ua)) {
-    return {
-      type: "linux",
-      name: "Linux",
-      icon: DEVICE_ICONS.linux,
-      isMobile: false,
-      isTablet: false,
-      isTV: false,
-    };
-  }
-
-  return {
-    type: "windows",
-    name: "Desktop",
-    icon: DEVICE_ICONS.windows,
-    isMobile: false,
-    isTablet: false,
-    isTV: false,
-  };
-}
-
-interface BrowserInfo {
-  name: string;
-  icon: string;
-  extensionUrl: string | null;
-  supportsExtensions: boolean;
-  violentmonkeyUrl: string;
-}
-
-function detectBrowser(device: DeviceInfo): BrowserInfo {
-  const ua = navigator.userAgent;
-
-  if (ua.includes("Firefox")) {
-    return {
-      name: "Firefox",
-      icon: BROWSER_ICONS.firefox,
-      extensionUrl: FIREFOX_EXTENSION_URL,
-      supportsExtensions: true,
-      violentmonkeyUrl:
-        "https://addons.mozilla.org/en-US/firefox/addon/violentmonkey/",
-    };
-  }
-
-  if (ua.includes("Safari") && !ua.includes("Chrome")) {
-    return {
-      name: "Safari",
-      icon: BROWSER_ICONS.safari,
-      extensionUrl: null,
-      supportsExtensions: false,
-      violentmonkeyUrl: SAFARI_USERSCRIPT_APP_URL,
-    };
-  }
-
-  if (ua.includes("Edg")) {
-    return {
-      name: "Edge",
-      icon: BROWSER_ICONS.edge,
-      extensionUrl: CHROME_EXTENSION_URL,
-      supportsExtensions: !device.isMobile && !device.isTablet,
-      violentmonkeyUrl:
-        "https://microsoftedge.microsoft.com/addons/detail/violentmonkey/eeagobfjdenkkddmbclomhiblgggliao",
-    };
-  }
-
-  if ((navigator as any).brave) {
-    return {
-      name: "Brave",
-      icon: BROWSER_ICONS.brave,
-      extensionUrl: CHROME_EXTENSION_URL,
-      supportsExtensions: !device.isMobile && !device.isTablet,
-      violentmonkeyUrl:
-        "https://chromewebstore.google.com/detail/violentmonkey/jinjaccalgkegednnccohejagnlnfdag",
-    };
-  }
-
-  if (ua.includes("OPR") || ua.includes("Opera")) {
-    return {
-      name: "Opera",
-      icon: BROWSER_ICONS.opera,
-      extensionUrl: CHROME_EXTENSION_URL,
-      supportsExtensions: !device.isMobile && !device.isTablet,
-      violentmonkeyUrl:
-        "https://chromewebstore.google.com/detail/violentmonkey/jinjaccalgkegednnccohejagnlnfdag",
-    };
-  }
-
-  // Default Chrome
-  return {
-    name: "Chrome",
-    icon: BROWSER_ICONS.chrome,
-    extensionUrl: CHROME_EXTENSION_URL,
-    supportsExtensions: !device.isMobile && !device.isTablet,
-    violentmonkeyUrl:
-      "https://chromewebstore.google.com/detail/violentmonkey/jinjaccalgkegednnccohejagnlnfdag",
-  };
-}
-
-// Step Button with glowing effect
-function StepButton({
-  step,
-  label,
-  href,
-  onClick,
-  glowing = false,
-  completed = false,
-}: {
-  step: number;
-  label: string;
-  href?: string;
-  onClick?: () => void;
-  glowing?: boolean;
-  completed?: boolean;
+function BreathingButton({ 
+  onClick, 
+  children, 
+  className, 
+  variant = "blue",
+  glow = false
+}: { 
+  onClick?: () => void; 
+  children: React.ReactNode; 
+  className?: string;
+  variant?: "blue" | "emerald" | "purple";
+  glow?: boolean;
 }) {
-  const baseClasses =
-    "flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-300 backdrop-blur-sm";
-  const stateClasses = completed
-    ? "bg-emerald-500/15 border border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-    : glowing
-      ? "bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border-2 border-cyan-400 shadow-[0_0_25px_rgba(0,255,241,0.5)]"
-      : "bg-white/5 border border-white/10 hover:border-white/30 hover:bg-white/10";
-
-  const content = (
-    <>
-      <span
-        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-          completed
-            ? "bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg"
-            : glowing
-              ? "bg-gradient-to-br from-cyan-400 to-cyan-500 text-black shadow-lg shadow-cyan-500/30"
-              : "bg-white/10 text-white/60"
-        }`}
-      >
-        {completed ? "✓" : step}
-      </span>
-      <span
-        className={`text-sm font-medium ${completed ? "text-emerald-400" : "text-white"}`}
-      >
-        {label}
-      </span>
-    </>
-  );
-
-  if (href) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`${baseClasses} ${stateClasses}`}
-      >
-        {content}
-      </a>
-    );
-  }
-
+  const colors = {
+    blue: { glow: "rgba(99, 102, 241, 0.7)", border: "rgba(99, 102, 241, 1)", bg: "bg-indigo-600/30" },
+    emerald: { glow: "rgba(16, 185, 129, 0.7)", border: "rgba(16, 185, 129, 1)", bg: "bg-emerald-600/30" },
+    purple: { glow: "rgba(168, 85, 247, 0.7)", border: "rgba(168, 85, 247, 1)", bg: "bg-purple-600/30" }
+  };
+  
+  const c = colors[variant];
+  
   return (
-    <button
-      type="button"
+    <motion.button
+      whileHover={{ scale: 1.05, filter: "brightness(1.2)" }}
+      whileTap={{ scale: 0.95 }}
+      animate={glow ? {
+        boxShadow: [
+          `0 0 10px 2px ${c.glow.replace("0.7", "0.2")}`,
+          `0 0 30px 10px ${c.glow}`,
+          `0 0 10px 2px ${c.glow.replace("0.7", "0.2")}`,
+        ],
+        borderColor: [
+          c.border.replace("1", "0.3"),
+          c.border,
+          c.border.replace("1", "0.3"),
+        ],
+      } : {}}
+      transition={{
+        duration: 2,
+        repeat: Infinity,
+        ease: "easeInOut",
+      }}
       onClick={onClick}
-      className={`${baseClasses} ${stateClasses}`}
+      className={`relative py-4 px-12 rounded-2xl font-black text-white transition-all border-2 overflow-hidden ${c.bg} ${className}`}
     >
-      {content}
-    </button>
+      <div className={`absolute inset-0 opacity-20 ${variant === "blue" ? "bg-indigo-500" : variant === "emerald" ? "bg-emerald-500" : "bg-purple-500"} blur-xl`} />
+      <span className="relative z-10 flex items-center justify-center gap-3 tracking-widest uppercase text-sm">
+        {children}
+      </span>
+    </motion.button>
   );
 }
 
-// Animated Loading Dots
-function LoadingDots() {
+function RefreshBar() {
+  const { t } = useTranslation();
+  const reload = useCallback(() => {
+    window.location.reload();
+  }, []);
   return (
-    <div className="flex items-center gap-1.5">
-      {[0, 1, 2, 3].map((i) => (
-        <span
-          key={i}
-          className="w-2.5 h-2.5 rounded-full bg-white/40 animate-pulse"
-          style={{
-            animationDelay: `${i * 150}ms`,
-            animationDuration: "1s",
-          }}
-        />
-      ))}
-    </div>
+    <Card className="mt-4 !bg-white/5 !backdrop-blur-xl !border-white/10">
+      <div className="flex items-center space-x-7">
+        <p className="flex-1 text-gray-300">{t("onboarding.extension.notDetecting")}</p>
+        <Button theme="secondary" onClick={reload}>
+          {t("onboarding.extension.notDetectingAction")}
+        </Button>
+      </div>
+    </Card>
   );
 }
 
-// Waiting Overlay - Shows while waiting for extension
-function WaitingOverlay({
-  isWaiting,
-  browserName,
-}: {
-  isWaiting: boolean;
-  browserName: string;
+export function ExtensionStatus(props: {
+  status: ExtensionStatusType;
+  loading: boolean;
+  showHelp?: boolean;
 }) {
-  if (!isWaiting) return null;
+  const { t } = useTranslation();
+  const [lastKnownStatus, setLastKnownStatus] = useState(props.status);
+  useEffect(() => {
+    if (!props.loading) setLastKnownStatus(props.status);
+  }, [props.status, props.loading]);
+
+  let content: ReactNode = null;
+  if (props.loading || props.status === "unknown")
+    content = (
+      <div className="flex flex-col items-center gap-4">
+        <Loading />
+        <p className="text-gray-400">{t("onboarding.extension.status.loading")}</p>
+      </div>
+    );
+  if (props.status === "disallowed" || props.status === "noperms")
+    content = (
+      <div className="flex flex-col items-center gap-4">
+        <p className="text-orange-300 font-medium">{t("onboarding.extension.status.disallowed")}</p>
+        <BreathingButton
+          onClick={() => {
+            sendPage({
+              page: "PermissionGrant",
+              redirectUrl: window.location.href,
+            });
+          }}
+          variant="blue"
+          glow
+          className="mt-2"
+        >
+          {t("onboarding.extension.status.disallowedAction")}
+        </BreathingButton>
+      </div>
+    );
+  else if (props.status === "failed")
+    content = <p className="text-red-400">{t("onboarding.extension.status.failed")}</p>;
+  else if (props.status === "outdated")
+    content = <p className="text-yellow-400">{t("onboarding.extension.status.outdated")}</p>;
+  else if (props.status === "success")
+    content = (
+      <p className="flex items-center text-emerald-400 font-bold text-lg">
+        <Icon icon={Icons.CHECKMARK} className="text-emerald-400 mr-4 text-2xl" />
+        {t("onboarding.extension.status.success")}
+      </p>
+    );
 
   return (
-    <div className="space-y-4 mt-6">
-      {/* Waiting Card */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-900/80 to-gray-800/80 border border-white/5 p-6 backdrop-blur-xl">
-        {/* Animated gradient border */}
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-cyan-500/20 to-purple-500/20 opacity-50 animate-pulse" />
-
-        <div className="relative z-10 flex flex-col items-center justify-center py-4">
-          <LoadingDots />
-          <p className="text-gray-400 text-sm mt-4 text-center">
-            Waiting for you to install the extension
-          </p>
+    <div className="w-full">
+      <Card className="!bg-white/5 !backdrop-blur-2xl !border-white/10 !rounded-[2rem] shadow-2xl">
+        <div className="flex py-8 flex-col space-y-2 items-center justify-center">
+          {content}
         </div>
-      </div>
-
-      {/* Reload Prompt */}
-      <div className="rounded-2xl bg-gradient-to-br from-gray-900/60 to-gray-800/60 border border-white/5 p-4 backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-gray-400 text-xs leading-relaxed">
-            Installed on {browserName}, but the site isn&apos;t detecting it?
-            Try reloading the page!
-          </p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="flex-shrink-0 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-white text-sm font-medium transition-all hover:scale-105"
-          >
-            Reload page
-          </button>
-        </div>
-      </div>
+      </Card>
+      {lastKnownStatus === "unknown" ? <RefreshBar /> : null}
+      {props.showHelp && props.status !== "success" ? (
+        <Card className="mt-6 !bg-orange-500/5 !border-orange-500/20">
+          <div className="flex items-center space-x-7 p-2">
+            <div className="bg-orange-500/20 p-3 rounded-xl">
+              <Icon icon={Icons.WARNING} className="text-orange-400 text-2xl" />
+            </div>
+            <p className="flex-1 text-orange-200/80 text-sm leading-relaxed">
+              <Trans
+                i18nKey="onboarding.extension.extensionHelp"
+                components={{
+                  bold: <span className="text-white font-bold" />,
+                }}
+              />
+            </p>
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }
 
 interface ExtensionPageProps {
-  status: ExtensionStatus;
+  status: ExtensionStatusType;
+  loading: boolean;
 }
 
 function DefaultExtensionPage(props: ExtensionPageProps) {
   const { t } = useTranslation();
-  const [device] = useState<DeviceInfo>(detectDevice);
-  const [browser] = useState<BrowserInfo>(() => detectBrowser(device));
-  const isSuccess = props.status === "success";
-  const isWaiting = props.status !== "success";
+  const installChromeLink = CHROME_EXTENSION_URL;
+  const installFirefoxLink = FIREFOX_EXTENSION_URL;
+
+  const browser = useMemo(() => {
+    return detectExtensionInstall();
+  }, []);
 
   return (
-    <div className="w-full max-w-sm mx-auto px-4">
-      {/* Header with Device + Browser - Improved Design */}
-      <div className="text-center mb-6">
-        <div className="flex justify-center gap-4 mb-4">
-          {/* Device Icon - Glassmorphism */}
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/30 to-cyan-500/30 rounded-2xl blur-xl opacity-50 group-hover:opacity-80 transition-opacity" />
-            <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 p-3 flex items-center justify-center backdrop-blur-sm">
-              <img
-                src={device.icon}
-                alt={device.name}
-                className="w-full h-full object-contain"
-                style={{
-                  filter:
-                    device.type === "ios" || device.type === "macos"
-                      ? "invert(1)"
-                      : "none",
-                }}
-              />
-            </div>
-          </div>
-          {/* Browser Icon - Glassmorphism */}
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/30 to-emerald-500/30 rounded-2xl blur-xl opacity-50 group-hover:opacity-80 transition-opacity" />
-            <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 p-3 flex items-center justify-center backdrop-blur-sm">
-              <img
-                src={browser.icon}
-                alt={browser.name}
-                className="w-full h-full object-contain"
-              />
-            </div>
-          </div>
-        </div>
-
-        <p className="text-xs text-gray-400 mb-3 font-medium">
-          {device.name} • {browser.name}
-        </p>
-
-        <h1 className="text-xl font-bold text-white mb-2">
+    <>
+      <div className="text-center mb-12">
+        <Heading2 className="!mt-0 !text-4xl font-black mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60">
           {t("onboarding.extension.title")}
-        </h1>
-        <p className="text-gray-400 text-sm leading-relaxed">
+        </Heading2>
+        <Paragraph className="max-w-[400px] mx-auto text-gray-400 text-lg leading-relaxed">
           {t("onboarding.extension.explainer")}
-        </p>
+        </Paragraph>
       </div>
 
-      {/* Main Install Button - Premium Design */}
-      {browser.supportsExtensions && browser.extensionUrl && (
-        <a
-          href={browser.extensionUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`relative overflow-hidden flex items-center justify-center gap-2 w-full py-3.5 px-4 rounded-xl font-semibold text-sm transition-all duration-300 mb-4 ${
-            isSuccess
-              ? "bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 text-emerald-400 border border-emerald-500/40"
-              : "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-400 hover:to-emerald-500 shadow-lg shadow-emerald-500/30"
-          }`}
-        >
-          {!isSuccess && (
-            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full animate-[shimmer_2s_infinite]" />
-          )}
-          <span className="relative z-10 flex items-center gap-2">
-            {isSuccess ? (
-              <>
-                <Icon icon={Icons.CHECKMARK} /> Extension Installed
-              </>
-            ) : (
-              `Install ${browser.name} Extension`
-            )}
-          </span>
-        </a>
-      )}
+      {/* Main extension icons */}
+      <div className="mb-12 flex flex-col md:flex-row md:space-x-12 space-y-6 md:space-y-0 justify-center items-center">
+        {installChromeLink &&
+        (browser === "chrome" || browser === "unknown") ? (
+          <Link
+            href={installChromeLink}
+            target="_blank"
+            className="flex flex-col items-center space-y-4 p-8 rounded-[2rem] bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 transition-all group relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-indigo-500/5 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+            <span className="relative z-10 text-white group-hover:scale-110 transition-transform duration-500">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 640 640"
+                width="80px"
+                height="80px"
+                fill="currentColor"
+                className="drop-shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+              >
+                <path d="M64 320C64 273.4 76.5 229.6 98.3 191.1L208.1 382.3C230 421.5 271.9 448 320 448C334.3 448 347.1 445.7 360.8 441.4L284.5 573.6C159.9 556.3 64 449.3 64 320zM429.1 385.6C441.4 366.4 448 343.1 448 320C448 281.8 431.2 247.5 404.7 224L557.4 224C569.4 253.6 576 286.1 576 320C576 461.4 461.4 575.1 320 576L429.1 385.6zM541.8 192L320 192C257.1 192 206.3 236.1 194.5 294.7L118.2 162.5C165 102.5 238 64 320 64C414.8 64 497.5 115.5 541.8 192zM408 320C408 368.6 368.6 408 320 408C271.4 408 232 368.6 232 320C232 271.4 271.4 232 320 232C368.6 232 408 271.4 408 320z" />
+              </svg>
+            </span>
+            <span className="font-black text-center text-sm uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors relative z-10">
+              {t("onboarding.extension.linkChrome")}
+            </span>
+          </Link>
+        ) : null}
+        {installFirefoxLink &&
+        (browser === "firefox" || browser === "unknown") ? (
+          <Link
+            href={installFirefoxLink}
+            target="_blank"
+            className="flex flex-col items-center space-y-4 p-8 rounded-[2rem] bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 transition-all group relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-orange-500/5 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+            <span className="relative z-10 text-white group-hover:scale-110 transition-transform duration-500">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 640 640"
+                width="80px"
+                height="80px"
+                fill="currentColor"
+                className="drop-shadow-[0_0_15px_rgba(249,115,22,0.3)]"
+              >
+                <path d="M567.5 305.5C567.4 303.9 567.3 302.4 567.3 300.8L567.3 300.7L566.9 296L566.9 295.9C565.6 282 563.2 268.2 559.6 254.7C559.6 254.6 559.6 254.6 559.5 254.5L558.4 250.5C558.3 250.3 558.3 250 558.2 249.9C557.8 248.7 557.5 247.4 557.1 246.2C557 246 557 245.6 556.9 245.4C556.5 244.2 556.2 243 555.8 241.9C555.7 241.5 555.6 241.3 555.4 240.9C555 239.7 554.7 238.6 554.2 237.4L553.8 236.3C553.4 235.2 553 234 552.6 232.9C552.5 232.6 552.4 232.2 552.2 231.9C551.7 230.8 551.4 229.6 550.9 228.5C550.8 228.3 550.7 227.9 550.5 227.7C550 226.5 549.5 225.4 549.1 224.2C549.1 224.1 549 224 549 223.8C547.4 220 545.8 216.1 544 212.4L543.6 211.7C543.1 210.7 542.8 209.9 542.3 209.1C542.1 208.6 541.8 208 541.6 207.5C541.2 206.7 540.8 205.9 540.4 205.1C540 204.5 539.8 203.9 539.4 203.3C539 202.7 538.6 201.9 538.2 201C537.8 200.4 537.5 199.7 537.1 199.1C536.7 198.5 536.3 197.7 535.9 196.9C535.5 196.2 535.1 195.5 534.7 194.9C534.3 194.2 533.9 193.6 533.5 192.9C533.1 192.2 532.7 191.6 532.3 190.9C531.9 190.2 531.5 189.6 531.1 189C530.7 188.4 530.3 187.6 529.8 186.8C529.4 186.2 529 185.6 528.6 185L527.2 182.9C526.8 182.3 526.4 181.7 526 181.1C525.5 180.4 524.9 179.5 524.4 178.8C524 178.3 523.7 177.7 523.3 177.2L521.5 174.7C521.1 174.2 520.9 173.9 520.5 173.4C519.5 172.1 518.7 170.9 517.7 169.7C510.5 160.3 502.7 151.4 494.2 143.1C488.5 137.1 482.4 131.6 475.9 126.4C471.9 122.9 467.7 119.7 463.4 116.6C455.7 110.8 447.4 105.8 438.8 101.5C436.4 100.2 434 99 431.6 97.8C413.9 89.2 395.3 82.6 376.2 78.2C374.3 77.8 372.4 77.4 370.6 77L370.5 77C369.5 76.9 368.7 76.6 367.7 76.5C355.2 74.1 342.5 72.8 329.7 72.5L319.1 72.5C303.8 72.7 288.6 74.4 273.6 77.5C240 84.6 210.4 98.7 190.7 116.5C189.6 117.5 188.8 118.2 188.3 118.7L187.8 119.2L187.9 119.2C187.9 119.2 188 119.2 188 119.2C188 119.2 188 119.1 188 119.1L187.9 119.2C188 119.1 188 119.1 188.1 119.1C202.7 110.3 223 103.1 237.5 99.5L243.4 98.1C243.8 98 244.2 98 244.6 97.9C246.3 97.5 248 97.2 249.8 96.8C250 96.8 250.4 96.7 250.6 96.7C314.8 85 383.2 104.2 430.8 149.7C441.1 159.5 450.1 170.5 457.7 182.5C488.1 231.7 485.2 293.6 461.5 330.1C427.1 383.1 350.1 401.4 302.5 354.9C286.5 339.4 277.3 318.2 276.9 295.9C276.7 285.2 278.9 274.7 283.1 264.9C284.8 261.1 296.2 239.2 301.3 240.3C288.2 237.5 263.8 242.9 246.6 268.5C231.2 291.4 232.1 326.7 241.6 351.8C235.6 339.4 231.5 326.2 229.5 312.6C217.3 230 272.8 159.6 323.8 142.1C296.3 118.1 227.3 119.8 176.1 157.5C146.2 179.5 124.9 210.7 113.6 247.9C115.3 227 123.2 195.8 139.4 164C122.2 172.9 100.4 201 89.6 226.9C74 264.3 68.6 309.1 73.5 351.7C73.9 354.9 74.2 358.1 74.6 361.3C94.5 478.4 196.6 567.7 319.4 567.7C456.5 567.7 567.7 456.5 567.7 319.3C567.6 314.8 567.5 310.2 567.2 305.8z" />
+              </svg>
+            </span>
+            <span className="font-black text-center text-sm uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors relative z-10">
+              {t("onboarding.extension.linkFirefox")}
+            </span>
+          </Link>
+        ) : null}
+      </div>
 
-      {/* Success Status */}
-      {isSuccess && (
-        <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm py-3 mb-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-          <Icon icon={Icons.CHECKMARK} />
-          <span className="font-medium">Extension working!</span>
-        </div>
-      )}
-
-      {/* Waiting Overlay - Shows when waiting for extension */}
-      <WaitingOverlay isWaiting={isWaiting} browserName={browser.name} />
-
-      {/* Alternative Method */}
-      <div className="pt-5 border-t border-white/10 mt-4">
-        <p className="text-gray-500 text-[10px] uppercase tracking-widest mb-4 text-center font-semibold">
-          Alternative
-        </p>
-        <div className="space-y-2.5">
-          <StepButton
-            step={1}
-            label="Install Violentmonkey"
-            href={browser.violentmonkeyUrl}
-            glowing={
-              !isSuccess &&
-              (!browser.supportsExtensions || !browser.extensionUrl)
-            }
-          />
-          <StepButton
-            step={2}
-            label="Install NEXUS Script"
+      {/* Secondary userscript option */}
+      <div className="mb-12 text-center opacity-60 hover:opacity-100 transition-opacity">
+        <div className="flex flex-col items-center space-y-3">
+          <Link
             href={USERSCRIPT_URL}
-          />
-          <StepButton
-            step={3}
-            label="Refresh Page"
-            onClick={() => window.location.reload()}
-          />
+            target="_blank"
+            className="text-gray-300 hover:text-white font-bold tracking-wider transition-all border-b border-white/10 hover:border-white/30"
+          >
+            {t("onboarding.extension.linkUserscript")}
+          </Link>
+          <span className="text-gray-500 text-[10px] font-black uppercase tracking-[0.2em]">
+            {t("onboarding.extension.userscriptNote")}
+          </span>
         </div>
       </div>
-    </div>
+
+      <ExtensionStatus status={props.status} loading={props.loading} showHelp />
+      
+      <div className="mt-12 text-center">
+        <Link
+          href="https://github.com/xp-technologies-dev/pstream-extension"
+          target="_blank"
+          className="text-gray-600 hover:text-gray-400 text-xs font-black uppercase tracking-widest transition-colors"
+        >
+          See extension source code
+        </Link>
+      </div>
+    </>
   );
 }
 
-function IosExtensionPage(props: ExtensionPageProps) {
+function IosExtensionPage(_props: ExtensionPageProps) {
   const { t } = useTranslation();
-  const [device] = useState<DeviceInfo>(detectDevice);
-  const isSuccess = props.status === "success";
-
   return (
-    <div className="w-full max-w-sm mx-auto px-4">
-      <div className="text-center mb-6">
-        <div className="flex justify-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-full bg-[#1a1f26] border border-white/10 p-2.5 flex items-center justify-center">
-            <img
-              src={DEVICE_ICONS.ios}
-              alt="iOS"
-              className="w-full h-full object-contain"
-              style={{ filter: "invert(1)" }}
-            />
-          </div>
-          <div className="w-12 h-12 rounded-full bg-[#1a1f26] border border-white/10 p-2.5 flex items-center justify-center">
-            <img
-              src={BROWSER_ICONS.safari}
-              alt="Safari"
-              className="w-full h-full object-contain"
-            />
-          </div>
-        </div>
-
-        <p className="text-xs text-gray-500 mb-3">{device.name} • Safari</p>
-
-        <h1 className="text-lg font-bold text-white mb-1">
-          {t("onboarding.extension.title")}
-        </h1>
-        <p className="text-gray-400 text-xs">
+    <div className="text-center">
+      <Heading2 className="!mt-0 !text-3xl font-black mb-6 text-white">
+        {t("onboarding.extension.title")}
+      </Heading2>
+      <div className="bg-white/5 border border-white/10 p-8 rounded-[2rem] backdrop-blur-xl">
+        <Paragraph className="max-w-[320px] mx-auto text-gray-400 leading-relaxed">
           <Trans
             i18nKey="onboarding.extension.explainerIos"
-            components={{ bold: <span className="text-white font-medium" /> }}
+            components={{ bold: <span className="text-white font-bold" /> }}
           />
-        </p>
+        </Paragraph>
       </div>
-
-      <div className="space-y-2">
-        <StepButton
-          step={1}
-          label="Install Userscripts App"
-          href={SAFARI_USERSCRIPT_APP_URL}
-          glowing={!isSuccess}
-        />
-        <StepButton
-          step={2}
-          label="Install NEXUS Script"
-          href={USERSCRIPT_URL}
-        />
-        <StepButton
-          step={3}
-          label="Refresh Page"
-          onClick={() => window.location.reload()}
-        />
-      </div>
-
-      {isSuccess && (
-        <div className="flex items-center justify-center gap-2 text-emerald-400 text-xs py-3 mt-3">
-          <Icon icon={Icons.CHECKMARK} />
-          Extension working!
-        </div>
-      )}
     </div>
   );
 }
 
 export function OnboardingExtensionPage() {
-  const { t: _t } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigateOnboarding();
   const { completeAndRedirect } = useRedirectBack();
   const extensionSupport = useMemo(() => detectExtensionInstall(), []);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
-  const [{ value }, exec] = useAsyncFn(
+  const [{ loading, value }, exec] = useAsyncFn(
     async (triggeredManually: boolean = false) => {
       const status = await getExtensionState();
       if (status === "success" && triggeredManually) completeAndRedirect();
@@ -573,7 +324,14 @@ export function OnboardingExtensionPage() {
     },
     [completeAndRedirect],
   );
-  useInterval(exec, 1000);
+
+  // Poll for state every 1s
+  useInterval(() => exec(false), 1000);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    exec(false);
+  }, [exec]);
 
   const componentMap: Record<
     ExtensionDetectionResult,
@@ -589,35 +347,37 @@ export function OnboardingExtensionPage() {
   return (
     <MinimalPageLayout>
       <PageTitle subpage k="global.pages.onboarding" />
+      <div className="min-h-screen bg-[#06080b] relative overflow-hidden flex flex-col items-center py-20 px-4">
+        {/* Cinematic Ambient Glows */}
+        <div className="absolute top-[-10%] left-[-5%] w-[60%] h-[60%] bg-indigo-500/10 blur-[200px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-[-5%] right-[-5%] w-[50%] h-[50%] bg-cyan-500/10 blur-[200px] rounded-full pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.03)_0%,transparent_70%)] pointer-events-none" />
 
-      <div className="w-full min-h-screen bg-[#0c1016] flex flex-col items-center justify-center py-6">
-        <div className="w-full max-w-sm">
-          <Stepper steps={2} current={2} className="mb-6 px-4" />
+        <div className="w-full max-w-2xl z-10 flex flex-col items-center">
+          <Stepper steps={2} current={2} className="mb-16 opacity-60 hover:opacity-100 transition-opacity w-[120px]" />
+          
+          <div className="w-full">
+            <PageContent loading={loading} status={value ?? "unknown"} />
+          </div>
 
-          <PageContent status={value ?? "unknown"} />
-
-          {/* Footer */}
-          <div className="flex justify-between items-center px-4 mt-6 pt-4 border-t border-white/5">
-            <button
-              type="button"
+          <div className="flex flex-col md:flex-row justify-between items-center w-full mt-16 gap-8">
+            <button 
               onClick={() => navigate("/onboarding")}
-              className="text-gray-500 hover:text-white text-xs transition-colors"
+              className="px-10 py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white font-black uppercase tracking-widest text-xs transition-all border border-white/5"
             >
-              ← Back
+              {t("onboarding.extension.back")}
             </button>
-
-            <button
-              type="button"
-              onClick={() => value === "success" && exec(true)}
-              disabled={value !== "success"}
-              className={`py-2 px-5 rounded-lg text-xs font-medium transition-all ${
-                value === "success"
-                  ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
-                  : "bg-white/5 text-gray-600 cursor-not-allowed"
-              }`}
-            >
-              Continue →
-            </button>
+            
+            {value === "success" && (
+              <BreathingButton 
+                onClick={() => exec(true)} 
+                variant="blue" 
+                glow
+                className="w-full md:w-auto"
+              >
+                {t("onboarding.extension.submit")}
+              </BreathingButton>
+            )}
           </div>
         </div>
       </div>

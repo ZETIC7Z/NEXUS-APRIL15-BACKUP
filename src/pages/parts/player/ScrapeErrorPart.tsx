@@ -49,7 +49,7 @@ export function ScrapeErrorPart(props: ScrapeErrorPartProps) {
       str += `${v.id}: ${v.status}\n`;
       if (v.reason) str += `${v.reason}\n`;
       if (v.error?.message)
-        str += `${v.error.name ?? "unknown"}: ${v.error.message}\n`;
+        str += `${v.error?.name ?? "unknown"}: ${v.error.message}\n`;
       else if (v.error) str += `${v.error.toString()}\n`;
     });
     return str;
@@ -60,6 +60,25 @@ export function ScrapeErrorPart(props: ScrapeErrorPartProps) {
       setExtensionState(state);
     });
   }, [t]);
+
+  // Periodically check if extension is enabled - auto reload if it becomes success
+  useEffect(() => {
+    if (extensionState === "success") return;
+
+    const interval = setInterval(async () => {
+      const state = await getExtensionState();
+      if (state === "success") {
+        window.location.reload();
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [extensionState]);
+
+  function handleOnboarding() {
+    setOnboardingCompleted(false);
+    window.location.reload();
+  }
 
   if (extensionState === "disallowed") {
     return (
@@ -107,11 +126,6 @@ export function ScrapeErrorPart(props: ScrapeErrorPartProps) {
     );
   }
 
-  function handleOnboarding() {
-    setOnboardingCompleted(false);
-    window.location.reload();
-  }
-
   return (
     <ErrorLayout>
       <ErrorContainer>
@@ -138,14 +152,7 @@ export function ScrapeErrorPart(props: ScrapeErrorPartProps) {
             {t("player.scraping.notFound.detailsButton")}
           </Button>
         </div>
-        {/* <Button
-          onClick={() => navigate("/discover")}
-          theme="secondary"
-          padding="md:px-12 p-2.5"
-          className="mt-6"
-        >
-          {t("player.scraping.notFound.discoverButton")}
-        </Button> */}
+
         {(!isExtensionActiveCached() || !febboxKey) && conf().HAS_ONBOARDING ? (
           <div className="mt-6 p-4 rounded-lg bg-video-scraping-error/20 border border-video-scraping-error/30 max-w-lg">
             <div className="flex items-start gap-3">
@@ -155,16 +162,17 @@ export function ScrapeErrorPart(props: ScrapeErrorPartProps) {
               />
               <div className="text-left">
                 <p className="text-white font-medium mb-2">
-                  {t("player.scraping.notFound.onboardingTitle") ||
-                    "Need More Sources?"}
+                  {extensionState === "unknown"
+                    ? "Extension Not Detected"
+                    : t("player.scraping.notFound.onboardingTitle") ||
+                      "Need More Sources?"}
                 </p>
                 {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
                   navigator.userAgent,
                 ) ? (
                   <>
                     <p className="text-sm text-type-dimmed mb-2">
-                      You&apos;re on a{" "}
-                      <strong className="text-white">mobile device</strong>.
+                      You&apos;re on a <strong className="text-white">mobile device</strong>.
                       Browser extensions aren&apos;t available on mobile
                       browsers.
                     </p>
@@ -181,20 +189,51 @@ export function ScrapeErrorPart(props: ScrapeErrorPartProps) {
                   </>
                 ) : (
                   <p className="text-sm text-type-dimmed mb-2">
-                    {t("player.scraping.notFound.onboarding")}
+                    {extensionState === "unknown"
+                      ? "Install our browser extension to unlock more sources and better quality providers like FebBox, VidLink, and more."
+                      : t("player.scraping.notFound.onboarding")}
                   </p>
                 )}
-                <Button
-                  onClick={() => handleOnboarding()}
-                  theme="purple"
-                  className="text-sm"
-                >
-                  {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+                <div className="flex flex-wrap gap-2">
+                  {extensionState === "unknown" &&
+                  !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
                     navigator.userAgent,
-                  )
-                    ? "View Setup Guide"
-                    : t("player.scraping.notFound.onboardingButton")}
-                </Button>
+                  ) ? (
+                    <Button
+                      href="/onboarding/extension"
+                      theme="purple"
+                      className="text-sm px-6"
+                    >
+                      Install Extension
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => handleOnboarding()}
+                      theme="purple"
+                      className="text-sm"
+                    >
+                      {/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+                        navigator.userAgent,
+                      )
+                        ? "View Setup Guide"
+                        : t("player.scraping.notFound.onboardingButton")}
+                    </Button>
+                  )}
+                  {(extensionState as string) === "disallowed" && (
+                    <Button
+                      onClick={() => {
+                        sendPage({
+                          page: "PermissionGrant",
+                          redirectUrl: window.location.href,
+                        });
+                      }}
+                      theme="purple"
+                      className="text-sm px-6"
+                    >
+                      Enable Extension
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

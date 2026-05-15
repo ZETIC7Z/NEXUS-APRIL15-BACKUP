@@ -11,6 +11,7 @@ import {
   setupM3U8Proxy,
 } from "@/backend/providers/fetchers";
 import {
+  febboxScraper,
   fsonlineDoodstreamEmbed,
   fsonlineScraper,
   vidlinkScraper,
@@ -30,7 +31,8 @@ setupM3U8Proxy();
  */
 const PROVIDER_NAME_PATCHES: Record<string, string> = {
   tugaflix: "Tugaflix 🔥",
-  // Add more overrides here if needed
+  "vidlink-custom": "VidLink 🔥",
+  "zeticuzapi-custom": "ZeticuzApi 🔥",
 };
 
 function patchProviderNames<T extends { id: string; name: string }[]>(
@@ -48,22 +50,21 @@ function buildBase() {
   const builder = buildProviders()
     .setFetcher(makeStandardFetcher(fetch))
     .addBuiltinProviders()
-    // === CUSTOM SOURCES (ordered by rank — higher rank = tried first) ===
-    // VidLink 🔥  rank: 900 (highest = first)
+    // === CUSTOM SOURCES (sorted by rank — providers engine tries highest rank first) ===
+    // 1. VidLink 🔥  rank: 890
     .addSource(vidlinkScraper)
-    // ZeticuzApi 🔥  rank: 890
+    // 2. ZeticuzApi 🔥  rank: 880
     .addSource(zeticuzApiScraper)
-    // FebBox 4K is injected separately via useProviderScrape (rank: 880)
-    // Tugaflix 🔥 — handled via builtin with name patch (rank: ~806)
-    // FSOnline  rank: 802
-    .addSource(fsonlineScraper)
-    // VidNest  rank: 800
-    .addSource(vidnestScraper)
-    // YesMovies  rank: 799
+    // 3. YesMovies 🔥 rank: 870
     .addSource(yesmoviesScraper)
-    // VidRock  rank: 798
+    // 4. VidRock 🔥 rank: 860
     .addSource(vidrockScraper)
-    .addEmbed(fsonlineDoodstreamEmbed);
+    // 5. FSOnline 🔥 rank: 850
+    .addSource(fsonlineScraper)
+    // 6. VidNest 🔥 rank: 840
+    .addSource(vidnestScraper)
+    // 7. FebBox 4K ⭐  rank: 900 (placed last by default)
+    // .addSource(febboxScraper)
 
   vidnestEmbeds.forEach((embed) => builder.addEmbed(embed));
 

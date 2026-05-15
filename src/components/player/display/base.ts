@@ -173,7 +173,7 @@ export function makeVideoElementDisplayInterface(): DisplayInterface {
     emit("changedquality", quality);
   }
 
-  function setupSource(vid: HTMLVideoElement, src: LoadableSource) {
+  async function setupSource(vid: HTMLVideoElement, src: LoadableSource) {
     hls = null;
     if (src.type === "hls") {
       if (canPlayHlsNatively(vid)) {
@@ -319,6 +319,18 @@ export function makeVideoElementDisplayInterface(): DisplayInterface {
         });
       }
 
+      if (isExtensionActiveCached()) {
+        const hostname = new URL(src.url).hostname;
+        await setDomainRule({
+          ruleId: RULE_IDS.SET_DOMAINS_HLS,
+          targetDomains: [hostname],
+          requestHeaders: {
+            ...src.preferredHeaders,
+            ...src.headers,
+          },
+        });
+      }
+
       hls.attachMedia(vid);
       hls.loadSource(processCdnLink(src.url));
       vid.currentTime = startAt;
@@ -348,9 +360,9 @@ export function makeVideoElementDisplayInterface(): DisplayInterface {
     }
   }
 
-  function setSource() {
+  async function setSource() {
     if (!videoElement || !source) return;
-    setupSource(videoElement, source);
+    await setupSource(videoElement, source);
 
     videoElement.addEventListener("play", () => {
       emit("play", undefined);

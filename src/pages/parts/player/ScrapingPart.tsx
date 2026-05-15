@@ -1,4 +1,4 @@
-﻿import { ProviderControls, ScrapeMedia } from "@p-stream/providers";
+import { ProviderControls, ScrapeMedia } from "@p-stream/providers";
 import classNames from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -74,10 +74,6 @@ export function ScrapingPart(props: ScrapingProps) {
         ? await resumeScraping(props.media, props.startFromSourceId)
         : await startScraping(props.media);
       if (!isMounted()) return;
-      props.onResult?.(
-        resultRef.current.sources,
-        resultRef.current.sourceOrder,
-      );
       report(
         scrapePartsToProviderMetric(
           props.media,
@@ -85,15 +81,22 @@ export function ScrapingPart(props: ScrapingProps) {
           resultRef.current.sources,
         ),
       );
-      props.onGetStream?.(output);
+
+      if (output) {
+        props.onGetStream?.(output);
+      } else {
+        props.onResult?.(
+          resultRef.current.sources,
+          resultRef.current.sourceOrder,
+        );
+      }
     })().catch(() => setFailedStartScrape(true));
   }, [startScraping, resumeScraping, props, report, isMounted]);
 
   let currentProviderIndex = sourceOrder.findIndex(
     (s) => s.id === currentSource || s.children.includes(currentSource ?? ""),
   );
-  if (currentProviderIndex === -1)
-    currentProviderIndex = sourceOrder.length - 1;
+  if (currentProviderIndex === -1) currentProviderIndex = 0;
 
   if (failedStartScrape)
     return <WarningPart>{t("player.turnstile.error")}</WarningPart>;
@@ -118,6 +121,7 @@ export function ScrapingPart(props: ScrapingProps) {
       >
         {sourceOrder.map((order) => {
           const source = sources[order.id];
+          if (!source) return null;
           const distance = Math.abs(
             sourceOrder.findIndex((o) => o.id === order.id) -
               currentProviderIndex,
@@ -142,6 +146,7 @@ export function ScrapingPart(props: ScrapingProps) {
                 >
                   {order.children.map((embedId) => {
                     const embed = sources[embedId];
+                    if (!embed) return null;
                     return (
                       <ScrapeItem
                         id={embedId}

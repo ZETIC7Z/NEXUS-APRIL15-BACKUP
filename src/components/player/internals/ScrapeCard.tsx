@@ -29,7 +29,7 @@ const statusTextMap: Partial<Record<ScrapeCardProps["status"], string>> = {
 const statusMap: Record<ScrapeCardProps["status"], StatusCircleProps["type"]> =
   {
     failure: "error",
-    notfound: "noresult",
+    notfound: "error",
     pending: "loading",
     success: "success",
     waiting: "waiting",
