@@ -1,5 +1,7 @@
 import classNames from "classnames";
-import { memo } from "react";
+import React, { memo } from "react";
+
+import { CutsIcon } from "./icons/CutsIcon";
 
 export enum Icons {
   SEARCH = "search",
@@ -111,7 +113,7 @@ export interface IconProps {
   className?: string;
 }
 
-const iconList: Record<Icons, string> = {
+const iconList: Record<Icons, string | React.ComponentType<any>> = {
   search: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 512 512"><!--! Font Awesome Pro 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2022 Fonticons, Inc. --><path fill="currentColor" d="M500.3 443.7l-119.7-119.7c27.22-40.41 40.65-90.9 33.46-144.7C401.8 87.79 326.8 13.32 235.2 1.723C99.01-15.51-15.51 99.01 1.724 235.2c11.6 91.64 86.08 166.7 177.6 178.9c53.8 7.189 104.3-6.236 144.7-33.46l119.7 119.7c15.62 15.62 40.95 15.62 56.57 0C515.9 484.7 515.9 459.3 500.3 443.7zM79.1 208c0-70.58 57.42-128 128-128s128 57.42 128 128c0 70.58-57.42 128-128 128S79.1 278.6 79.1 208z"/></svg>`,
   bookmark: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 384 512"><!--! Font Awesome Pro 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2022 Fonticons, Inc. --><path fill="currentColor" d="M384 48V512l-192-112L0 512V48C0 21.5 21.5 0 48 0h288C362.5 0 384 21.5 384 48z"/></svg>`,
   clock: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 512 512"><!--! Font Awesome Pro 6.0.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2022 Fonticons, Inc. --><path fill="currentColor" d="M256 512C114.6 512 0 397.4 0 256C0 114.6 114.6 0 256 0C397.4 0 512 114.6 512 256C512 397.4 397.4 512 256 512zM232 256C232 264 236 271.5 242.7 275.1L338.7 339.1C349.7 347.3 364.6 344.3 371.1 333.3C379.3 322.3 376.3 307.4 365.3 300L280 243.2V120C280 106.7 269.3 96 255.1 96C242.7 96 231.1 106.7 231.1 120L232 256z"/></svg>`,
@@ -224,7 +226,7 @@ const iconList: Record<Icons, string> = {
   apple: `<svg xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 384 512" fill="currentColor"><!--!Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2024 Fonticons, Inc.--><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>`,
   linux: `<svg xmlns="http://www.w3.org/2000/svg" height="1em" viewBox="0 0 448 512" fill="currentColor"><!--!Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2024 Fonticons, Inc.--><path d="M220.8 123.3c1.1 0 2.2-.1 3.2-.1h5.3c1 0 2.1 .1 3.2 .1c28.3 1.2 55.4 13.9 74.4 34.8c42 46.2 38.3 103 36.8 116.8c12 21.6 28 35.8 43.1 48c4.6 3.7 9 7.3 12.8 11V344c0 30.2-22.3 52.8-51.5 59.9c0 0-21.7 5.2-57.8 7.3c6.9 13.7 12 26 15 34.2c6.1 16.5 10.1 29.5-12.8 34.1c-14.8 3-23.7-5.9-28-10.7c-4.5-5.1-9.9-12-16-20.1c-9.5-12.6-21.8-28.9-38-40.4v-.1c-16.1 11.5-28.4 27.8-38 40.4c-6.1 8.1-11.5 15-16 20.1c-4.3 4.8-13.2 13.6-28 10.7c-23-4.6-18.9-17.5-12.8-34.1c3.1-8.2 8.2-20.5 15-34.2c-36.2-2.1-57.8-7.3-57.8-7.3c-29.2-7.1-51.5-29.7-51.5-59.9v-10.2c3.8-3.7 8.2-7.3 12.8-11c15.1-12.2 31.1-26.4 43.1-48c-1.5-13.7-5.2-70.6 36.8-116.8c19-20.9 46.1-33.6 74.4-34.8zm97.7 52.3c21-13 46.1-20.5 73.1-20.5c11.7 0 23.1 1.6 34.1 4.7c-17.7-18.4-42.5-30-70.1-30c-53.7 0-97.3 43.6-97.3 97.3c0 .5-.1 1-.1 1.5c10.4 4.5 19.3 11 26.6 18.2c.4-3.1 .7-6.2 1.4-9.3c5.1-23.3 16.4-44.4 32.3-61.9zm-290.4-20.5c27.1 0 52.2 7.6 73.1 20.5c15.9 17.4 27.2 38.6 32.3 61.9c.7 3.1 1 6.2 1.4 9.3c7.3-7.2 16.3-13.7 26.6-18.2c0-.5-.1-1-.1-1.5c0-53.7-43.6-97.3-97.3-97.3c-27.6 0-52.4 11.6-70.1 30c10.9-3.1 22.4-4.7 34.1-4.7zm196.2 60c-26.6 0-48.1 24.3-48.1 54.2c0 30 21.6 54.3 48.1 54.3c26.6 0 48.2-24.3 48.2-54.3c0-30-21.6-54.2-48.2-54.2zm-100 .4c-26.4 0-47.9 24.2-47.9 54c0 29.8 21.4 54 47.9 54c26.5 0 47.9-24.2 47.9-54c0-29.8-21.4-54-47.9-54zM240 274.6c0 14.1-13.6 25.5-30.5 25.5c-16.8 0-30.5-11.4-30.5-25.5s13.6-25.5 30.5-25.5s30.5 11.4 30.5 25.5zm-59.3-51.5c-8.9 0-16.1 7.2-16.1 16.1c0 8.9 7.2 16.1 16.1 16.1c8.9 0 16.1-7.2 16.1-16.1s-7.2-16.1-16.1-16.1zm110 0c-8.9 0-16.1 7.2-16.1 16.1c0 8.9 7.2 16.1 16.1 16.1c8.9 0 16.1-7.2 16.1-16.1c0-8.9-7.2-16.1-16.1-16.1z"/></svg>`,
   android: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 576 512" fill="currentColor"><!--!Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2024 Fonticons, Inc.--><path d="M420.55,301.93a24,24,0,1,1,24-24,24,24,0,0,1-24,24m-265.1,0a24,24,0,1,1,24-24,24,24,0,0,1-24,24m273.7-144.48,47.94-83a10,10,0,1,0-17.27-10h0l-48.54,84.13a283.25,283.25,0,0,0-246.56,0L116.18,64.45a10,10,0,1,0-17.27,10h0l48,83.24C53.92,208.16,0,301.36,0,410.63H576c0-109.27-53.92-202.47-146.85-253.18Z"/></svg>`,
-  cuts: `<img src="/cuts.png" style="width: 1em; height: 1em; object-fit: contain;" />`,
+  cuts: CutsIcon,
 };
 
 export const Icon = memo((props: IconProps) => {
@@ -236,10 +238,17 @@ export const Icon = memo((props: IconProps) => {
       ? "rtl:-scale-x-100"
       : "";
 
-  return (
-    <span
-      dangerouslySetInnerHTML={{ __html: iconList[props.icon] }} // eslint-disable-line react/no-danger
-      className={classNames(props.className, flipClass)}
-    />
-  );
+  const iconContent = iconList[props.icon];
+
+  if (typeof iconContent === "string") {
+    return (
+      <span
+        dangerouslySetInnerHTML={{ __html: iconContent }} // eslint-disable-line react/no-danger
+        className={classNames(props.className, flipClass)}
+      />
+    );
+  }
+
+  const IconComponent = iconContent;
+  return <IconComponent className={classNames(props.className, flipClass)} />;
 });

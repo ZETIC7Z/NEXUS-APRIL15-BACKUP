@@ -53,7 +53,20 @@
 
 ---
 
-## 🆕 What's New (Latest Update)
+### v5.7.0 - May 15, 2026
+
+#### 🎬 Cuts Feature Enhancements
+
+- **Animated Cuts Icon** - Implemented a dynamic, animated icon for the Cuts feature using Framer Motion.
+- **Brand Consolidation** - Fully replaced all remaining Music references with the new "Cuts" identity.
+- **Interactive UI** - Added smooth micro-animations and hover effects to primary navigation elements.
+
+#### 🔌 Extension & Logic Updates
+
+- **Auto-Detection Reliability** - Enhanced the browser extension detection logic for seamless user onboarding.
+- **Synchronized Backups** - Established automated synchronization with backup repositories for project integrity.
+
+---
 
 ### v5.5.0 - May 15, 2026
 
