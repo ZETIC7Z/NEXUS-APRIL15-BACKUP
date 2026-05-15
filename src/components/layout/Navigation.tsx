@@ -585,7 +585,7 @@ function PillNavigation({ onSearchToggle }: { onSearchToggle?: () => void }) {
         className="absolute h-[calc(100%-12px)] rounded-full bg-[hsl(var(--colors-active))] opacity-20 transition-all duration-300 ease-in-out pointer-events-none top-[6px]"
       />
 
-      {/* Nav Items: Home, Browse ▾, Music, Genre ▾ */}
+      {/* Nav Items: Home, Browse ▾, Cuts, Genre ▾ */}
       {navItems.map((item, index) => (
         <React.Fragment key={item.path}>
           <a
@@ -605,7 +605,7 @@ function PillNavigation({ onSearchToggle }: { onSearchToggle?: () => void }) {
           </a>
           {/* Insert Browse dropdown after Home (index 0) */}
           {index === 0 && <BrowseDropdown />}
-          {/* Insert Genre dropdown after Music (index 1) */}
+          {/* Insert Genre dropdown after Cuts (index 1) */}
           {index === 1 && <GenreDropdown />}
         </React.Fragment>
       ))}
@@ -740,8 +740,8 @@ export function Navigation(props: NavigationProps) {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      if (location.pathname === "/music") {
-        navigate(`/music?q=${encodeURIComponent(searchQuery.trim())}`);
+      if (location.pathname === "/cuts") {
+        navigate(`/cuts?q=${encodeURIComponent(searchQuery.trim())}`);
       } else {
         navigate(`/browse/${encodeURIComponent(searchQuery.trim())}`);
       }
@@ -897,12 +897,12 @@ export function Navigation(props: NavigationProps) {
                     setSearchQuery(val);
                     stopSearchCloseTimer(); // Keep open while typing
 
-                    // Live update music search
-                    if (location.pathname === "/music") {
+                    // Live update cuts search
+                    if (location.pathname === "/cuts") {
                       if (val.trim()) {
-                        navigate(`/music?q=${encodeURIComponent(val.trim())}`);
+                        navigate(`/cuts?q=${encodeURIComponent(val.trim())}`);
                       } else {
-                        navigate("/music");
+                        navigate("/cuts");
                       }
                     }
                   }}
@@ -928,7 +928,7 @@ export function Navigation(props: NavigationProps) {
           </form>
 
           {/* Live Search Results */}
-          {location.pathname !== "/music" && (
+          {location.pathname !== "/cuts" && (
             <LiveSearchResults
               query={searchQuery}
               onClose={() => {
@@ -1040,12 +1040,12 @@ export function Navigation(props: NavigationProps) {
                     setSearchQuery(val);
                     stopSearchCloseTimer(); // Keep open while typing
 
-                    // Live update music search
-                    if (location.pathname === "/music") {
+                    // Live update cuts search
+                    if (location.pathname === "/cuts") {
                       if (val.trim()) {
-                        navigate(`/music?q=${encodeURIComponent(val.trim())}`);
+                        navigate(`/cuts?q=${encodeURIComponent(val.trim())}`);
                       } else {
-                        navigate("/music");
+                        navigate("/cuts");
                       }
                     }
                   }}
@@ -1071,7 +1071,7 @@ export function Navigation(props: NavigationProps) {
           </form>
 
           {/* Live Search Results (Mobile) */}
-          {location.pathname !== "/music" && (
+          {location.pathname !== "/cuts" && (
             <LiveSearchResults
               query={searchQuery}
               onClose={() => {
