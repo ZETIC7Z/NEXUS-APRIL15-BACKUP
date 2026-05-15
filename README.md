@@ -55,6 +55,22 @@
 
 ## 🆕 What's New (Latest Update)
 
+### v5.5.0 - May 15, 2026
+
+#### 🔌 Extension Auto-Detection
+
+- **Browser Extension Detection** - Automatically detects if the NEXUS helper extension is installed.
+- **Improved Onboarding** - Streamlined extension permission flow for enhanced playback reliability.
+- **Auto-Redirect** - Successfully transitions users to movies with extension-enabled sources once permissions are granted.
+
+#### 🎨 Brand Refresh & UI Updates
+
+- **Rebranded "Music" to "Cuts"** - Replaced the legacy Music section with the new "Cuts" feature.
+- **Custom Iconography** - Integrated high-fidelity custom icons for the "Cuts" navigation item.
+- **Placeholder Implementation** - Added interactive "Coming Soon" notifications for upcoming features.
+
+---
+
 ### v5.4.0 - January 2026
 
 #### 🎨 Landing Page Redesign

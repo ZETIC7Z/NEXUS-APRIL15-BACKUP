@@ -59,7 +59,7 @@ const DeveloperPage = lazy(() => import("@/pages/DeveloperPage"));
 const TestView = lazy(() => import("@/pages/developer/TestView"));
 const PlayerView = lazyWithPreload(() => import("@/pages/PlayerView"));
 const SettingsPage = lazyWithPreload(() => import("@/pages/Settings"));
-const MusicPage = lazy(() => import("@/pages/MusicPage"));
+
 
 PlayerView.preload();
 SettingsPage.preload();
@@ -254,16 +254,7 @@ function App() {
               </AuthGuard>
             }
           />
-          <Route
-            path="/music"
-            element={
-              <AuthGuard>
-                <Suspense fallback={null}>
-                  <MusicPage />
-                </Suspense>
-              </AuthGuard>
-            }
-          />
+
 
           <Route
             path="/history"

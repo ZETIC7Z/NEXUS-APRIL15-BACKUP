@@ -49,7 +49,7 @@ const browseItems: NavItem[] = [
   { path: "/movies", label: "Movies", icon: Icons.FILM },
   { path: "/tv", label: "TV Series", icon: Icons.DISPLAY },
   { path: "/anime", label: "Anime", icon: Icons.STAR },
-  { path: "/music", label: "Music", icon: Icons.WAND },
+  { path: "/cuts", label: "Cuts", icon: Icons.CUTS },
   { path: "/my-bookmarks", label: "My Favorites", icon: Icons.HEART },
   { path: "/watch-history", label: "Recent Watch", icon: Icons.CLOCK },
 ];
@@ -178,6 +178,11 @@ function BrowseDropdown() {
   );
 
   const handleNavigation = (path: string) => {
+    if (path === "/cuts") {
+      alert("Coming Soon");
+      setIsOpen(false);
+      return;
+    }
     navigate(path);
     setIsOpen(false);
     window.scrollTo(0, 0);

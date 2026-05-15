@@ -31,7 +31,7 @@ const mainNavItems: SidebarItem[] = [
   { id: "movies", label: "Movies", icon: Icons.FILM, path: "/movies" },
   { id: "tv", label: "TV Series", icon: Icons.DISPLAY, path: "/tv" },
   { id: "anime", label: "Anime", icon: Icons.DRAGON, path: "/anime" },
-  { id: "music", label: "Music", icon: Icons.WAND, path: "/music" },
+  { id: "cuts", label: "Cuts", icon: Icons.CUTS, path: "/cuts" },
   { id: "genre", label: "Genre", icon: Icons.BOOKMARK, hasSubmenu: true },
   {
     id: "favorites",
@@ -97,7 +97,7 @@ const genreItems = [
   { id: 14, name: "Fantasy", path: "/discover/more/genre/14/movie" },
   { id: 36, name: "History", path: "/discover/more/genre/36/movie" },
   { id: 27, name: "Horror", path: "/discover/more/genre/27/movie" },
-  { id: 10402, name: "Music", path: "/discover/more/genre/10402/movie" },
+
   { id: 9648, name: "Mystery", path: "/discover/more/genre/9648/movie" },
   { id: 10749, name: "Romance", path: "/discover/more/genre/10749/movie" },
   { id: 878, name: "Sci-Fi", path: "/discover/more/genre/878/movie" },
@@ -650,6 +650,10 @@ export function YouTubeSidebar() {
 
   // Close sidebar when navigating
   const handleNavigation = (path: string) => {
+    if (path === "/cuts") {
+      alert("Coming Soon");
+      return;
+    }
     navigate(path);
     if (window.innerWidth < 768) {
       setMobileOpen(false);
